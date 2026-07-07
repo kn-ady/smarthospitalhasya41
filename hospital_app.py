@@ -1,11 +1,95 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import pickle
-import os
 
-st.set_page_config(page_title="Smart Hosipital Navigator",page_icon = "🏥",layout="wide")
+st.set_page_config(page_title"Smart Hosipital Navigator",page_icon = "🏥",layout="wide")
 
-st.title("Smart Hospital Navigator")
+@st.cache_resource
+def load_mymodel():
+    with open('hospital_model.pkl','rb') as f:
+        bundle = pickle.load(f)
+    return bundle
+
+bundle = load_mymodel
+knn = bundle['model']
+scaler = bundle['scaler']
+le_department = bundle['le_department']
+
+st.title("🏥Smart Hospital Patient Triage")
+st.write("Enter the patient's symptom data below to get a recomendation for a specialist department")
+st.markdown("---")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("📊Physical Data & Vital Signs")
+    age = st.number_input("Patient Age(Years), min_value=0, max_value=120, values=25")
+    gender_input = st.selectbox("Gender, ["Male", "Female", "Unknow"]")
+
+    temperature_level = st.selectbox(
+        "Body Temperature Level"
+        ["Below 37℃", "37℃-38℃", "Above 38℃", "Unknow"]
+    )
+    heart_rate_level = st.selectbox(
+        "Heart Rate"
+        ["Below 60 bpm", "60-100bpm", "Above 100bpm", "Unknow"]
+    )
+    duration = st.selectbox(
+        "Duration of Symptoms"
+        ["Less than 1 day", "1-3 days", "4-7 days", "More than 1 week", "Unknow"]
+    )
+
+with col2:
+    st.subheader("🤒'Symptoms")
+    fever = 1 if st.checkbox("Fever") else 0
+    cough = 1 if st.checkbox("Cough") else 0
+    headache = 1 if st.checkbox("Headache") else 0
+    chest_pain = 1 if st.checkbox("Chest Pain") else 0 
+    stomach_pain = 1 if st.checkbox("Stonach Pain") else 0
+    shortness_breath = 1 if st.checkbox("Shortness of Breath") else 0
+    nausea_vomiting = 1 if st.checkbox("Nausea / Vomiting") else 0
+    dizzines = 1 if st.checkbox("Dizzines") else 0
+    skin_rash = 1 if st.checkbox("Skin Rash") else 0 
+
+    st.subheader("🕒Medical History(Comorbidities)")
+    diabetes = 1 if st.checkbox("Diabetes") else 0
+    asthma = 1 if st.checkbox("Asthma") else 0
+    hypertension = 1 if st.checkbox("Hypertension") else 0
+    heart_disease = 1 if st.checkbox("Heart Disease") else 0
+
+st.markdown("---")
+
+if st.button("🚀 Process Patient Triage", type="primary", use_container_width=True):
+    gender_encoded = {'Male': 0, 'Female': 1, 'Unknow': 2}[gender_input]
+    temp_encoded = {'Below 37℃': 0, '37℃-38℃': 1, 'Above 38℃': 2, 'Unknow': 3}[temperature_level]
+    hr_encoded = {'Below 60bpm': 0, '60-100bpm': 1, 'Above 100 bpm': 2, 'Unknow': 3}[heart_rate_level]
+    dur_encoded = {'Less than 1 day': 0, '1-3 days': 1, '4-7 days': 2, 'More than 1 week': 3, 'Unknow': 4}[duration]
+
+    new_patient = pd.DataFrame([{
+        'age': age, 'gender': gender_encoded, 'fever': fever, 'cough': cough, 'headache': headache,
+        'chest_pain': chest_pain, 'stomach_pain': stomach_pain, 'shortness_breath': shortness_breath,
+        'nause_vomiting': nausea_vomiting, 'dizzines': dizzines, 'skin_rash': skin_rash,
+        'temperature_level': temp_encoded, 'hear_rate_level': hr_encoded, 'duration': dur_encoded,
+        'diabetes': diabetes, 'asthma': asthma, 'hypertension': hypertension, 'heart_disease': heart_disease
+    }])
+
+    cols_to_scale = bundle['cols_to_scale']
+    new_patient[cols_to_scale] = scaler.transform(new_patient[cols_to_scale])
+
+    pred_code = knn.predict(new_patient)[0]
+    proba = knn.predict_proba(new_patient)[0]
+
+    dept_name = le_department.inverse_transform([pred_code][0])
+    confidence = proba[pred_code] * 100
+
+    st.succes(f"### 🎯 Recomended Department: **{dept_name}**")
+    st.info("💡'**AI Confidence Level** {confidence:.1f}")
+
+    with st.expander("🔎 View Probility Deatils for All Departments"):
+        for i, name in enumerate(le_department.classes_):
+            score = proba[i] * 100
+            st.write(f"**{name}**")
+            st.progress(int(score))
+            st.write(f"{score:.1f}%")
 
 
